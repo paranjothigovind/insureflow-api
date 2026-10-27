@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -11,44 +10,61 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    environment {
+        DATABASE_URL = 'postgresql://insureflow_app:ci_password@localhost:5432/insureflow?schema=public'
+    }
+
     stages {
+        stage('Environment Check') {
+            steps {
+                sh 'node --version'
+                sh 'npm --version'
+                sh 'git --version'
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
-                bat 'npm ci'
+                sh 'npm ci'
             }
         }
 
         stage('Generate Prisma Client') {
             steps {
-                bat 'npx prisma generate'
+                sh 'npx prisma generate'
             }
         }
 
         stage('Lint') {
             steps {
-                bat 'npm run lint'
+                sh 'npm run lint'
             }
         }
 
         stage('Test') {
             steps {
-                bat 'npm test'
+                sh 'npm test'
             }
         }
 
         stage('Build') {
             steps {
-                bat 'npm run build'
+                sh 'npm run build'
             }
         }
     }
 
     post {
         success {
-            echo 'InsureFlow CI pipeline passed!'
+            echo 'InsureFlow CI passed! All pipeline stages succeeded.'
         }
+
         failure {
-            echo 'InsureFlow CI pipeline failed. Check the stage logs.'
+            echo 'InsureFlow CI failed. Check the stage logs above.'
+        }
+
+        always {
+            echo 'InsureFlow CI pipeline finished.'
         }
     }
 }
