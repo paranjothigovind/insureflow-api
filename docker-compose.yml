@@ -1,0 +1,22 @@
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: insureflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: insureflow
+      POSTGRES_USER: insureflow_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - insureflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insureflow_app -d insureflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  insureflow_pgdata:
