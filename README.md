@@ -18,6 +18,8 @@ CRUD endpoints for customers, policies and payments are not built yet. The schem
 
 ## API
 
+Interactive documentation (Swagger UI) is served at **`/docs`**, for example <http://localhost:3000/docs>. Use **Authorize** there to paste an access token and try the protected endpoints. The raw OpenAPI document is at `/docs-json`.
+
 | Method | Path             | Auth   | Description                                                   |
 | ------ | ---------------- | ------ | ------------------------------------------------------------- |
 | GET    | `/`              | –      | Service banner: `{ service, status, message }`                |
@@ -51,7 +53,8 @@ curl http://localhost:3000/auth/me -H "Authorization: Bearer <accessToken>"
 - **Token validation:** `JwtStrategy` re-reads the user on every request, so deactivating an account takes effect immediately instead of when the token expires.
 - **Money:** amounts are stored as `Decimal` columns rather than floats.
 - **Rate limiting:** 100 requests/minute per client by default, and 5/minute on `register` and `login` to slow brute-force attempts (`@nestjs/throttler`). Health routes are exempt. `trust proxy` is enabled so limits apply to the real client IP behind a load balancer.
-- **HTTP hardening:** `helmet` sets secure response headers. CORS is closed unless `CORS_ORIGIN` lists the allowed frontend origin(s).
+- **HTTP hardening:** `helmet` sets secure response headers. CORS is closed unless `CORS_ORIGIN` lists the allowed frontend origin(s). Only `/docs` has its Content-Security-Policy relaxed, because Swagger UI needs inline scripts.
+- **API docs:** generated from the code with `@nestjs/swagger` (`src/swagger.ts`), so the schemas come from the same DTOs the validation pipe uses and can't drift from the real request rules.
 
 ## Data model
 
@@ -127,6 +130,7 @@ Production runs as a Docker web service on [Render](https://render.com), backed 
    - `CORS_ORIGIN` (frontend URL) and the optional `OBSERVE_APP_*` pair.
 3. Deploy. Render builds the image, uses `GET /health` as the health check, and redeploys on every push to `master`.
 4. Smoke test: `curl https://<service>.onrender.com/health/db` should return `{"status":"ok","database":"connected"}`.
+5. Browse the API docs at `https://<service>.onrender.com/docs`.
 
 To roll back, redeploy a previous deploy from the Render dashboard. Keep migrations backward-compatible so an older build still works against the newer schema.
 

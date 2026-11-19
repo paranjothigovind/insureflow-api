@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule, ObserveInstrument } from './app.module.js';
+import { SWAGGER_PATH, setupSwagger } from './swagger.js';
 
 const DEFAULT_PORT = 3000;
 
@@ -25,7 +27,16 @@ async function bootstrap() {
   app.set('trust proxy', 1);
 
   // Secure HTTP headers (HSTS, no MIME sniffing, frame protection, ...).
-  app.use(helmet());
+  // Swagger UI relies on inline scripts and styles, which helmet's default
+  // Content-Security-Policy blocks, so that one header is relaxed for the docs
+  // page only. Every other route keeps the full policy.
+  const strictHelmet = helmet();
+  const docsHelmet = helmet({ contentSecurityPolicy: false });
+  app.use((req: Request, res: Response, next: NextFunction) =>
+    req.path.startsWith(`/${SWAGGER_PATH}`)
+      ? docsHelmet(req, res, next)
+      : strictHelmet(req, res, next),
+  );
 
   // CORS is closed by default; list the frontend origin(s) to open it up.
   const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGIN);
@@ -41,6 +52,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  setupSwagger(app);
 
   // Lets Prisma disconnect cleanly on SIGTERM (e.g. `docker stop`).
   app.enableShutdownHooks();
