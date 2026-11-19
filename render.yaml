@@ -1,0 +1,28 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Render builds the Dockerfile in this repo and runs it as a web service.
+services:
+  - type: web
+    name: insureflow-api
+    runtime: docker
+    plan: free
+    region: singapore # closest Render region to the Supabase project (ap-south-1)
+    branch: master
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Supabase session-pooler connection string (port 5432). Set in the dashboard.
+      - key: DATABASE_URL
+        sync: false
+      # Generated once by Render and kept stable across deploys.
+      - key: JWT_SECRET
+        generateValue: true
+      # Frontend origin(s), comma-separated. Leave empty to keep CORS closed.
+      - key: CORS_ORIGIN
+        sync: false
+      # Optional: NestJS Observe.
+      - key: OBSERVE_APP_KEY
+        sync: false
+      - key: OBSERVE_APP_SECRET
+        sync: false

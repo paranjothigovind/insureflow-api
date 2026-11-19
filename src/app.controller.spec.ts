@@ -20,8 +20,19 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('identifies the service and reports it as running', () => {
+      expect(appController.getStatus()).toEqual({
+        service: 'InsureFlow API',
+        status: 'ok',
+        message: 'Welcome to the InsureFlow API. The service is running.',
+      });
+    });
+  });
+
+  describe('health', () => {
+    it('reports liveness without touching the database', () => {
+      expect(appController.getHealth()).toEqual({ status: 'ok' });
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
   });
 

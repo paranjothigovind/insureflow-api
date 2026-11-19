@@ -11,8 +11,16 @@ export class AppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  getHello(): string {
-    return 'Hello World!';
+  getStatus() {
+    return {
+      service: 'InsureFlow API',
+      status: 'ok',
+      message: 'Welcome to the InsureFlow API. The service is running.',
+    };
+  }
+
+  getHealth() {
+    return { status: 'ok' };
   }
 
   async checkDatabase() {

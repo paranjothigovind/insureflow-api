@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# ---- Build stage ----
+# ---- Build stage: install everything, compile TypeScript ----
 FROM node:24-bookworm-slim AS builder
 
-# Prisma's query engine needs OpenSSL.
+# Prisma's engines need OpenSSL.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -17,12 +17,11 @@ COPY prisma ./prisma/
 COPY tsconfig*.json nest-cli.json ./
 COPY src ./src/
 
-# Generate the Prisma client, then compile the NestJS app.
 RUN npx prisma generate
 RUN npm run build
 
 
-# ---- Production stage ----
+# ---- Production stage: runtime dependencies + compiled output only ----
 FROM node:24-bookworm-slim AS production
 
 RUN apt-get update \
@@ -30,19 +29,25 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
-WORKDIR /app
 
-COPY package*.json ./
+# Everything below is owned by the unprivileged `node` user, so Prisma can
+# write to node_modules if it needs to fetch an engine binary.
+WORKDIR /app
+RUN chown node:node /app
+USER node
+
+COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev
 
-# Generated Prisma client + compiled output.
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/dist ./dist
+# Generate the client against this image's own Prisma install.
+COPY --chown=node:node prisma ./prisma/
+RUN npx prisma generate
 
-# Run as the unprivileged user that ships with the Node image.
-USER node
+COPY --from=builder --chown=node:node /app/dist ./dist
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+# Apply pending migrations, then start the server. `migrate deploy` is safe to
+# run on every start: it only applies migrations that are not yet recorded,
+# and Prisma takes a database lock so concurrent instances don't collide.
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
