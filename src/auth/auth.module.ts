@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants.js';
 
 @Module({
   imports: [
@@ -15,21 +16,15 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-
-        if (!secret) {
-          throw new Error('JWT_SECRET is not configured');
-        }
-
         return {
-          secret,
-          signOptions: { expiresIn: 900 },
+          secret: config.getOrThrow<string>('JWT_SECRET'),
+          signOptions: { expiresIn: ACCESS_TOKEN_TTL_SECONDS },
         };
       },
     }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [AuthService]
+  exports: [AuthService],
 })
 export class AuthModule {}

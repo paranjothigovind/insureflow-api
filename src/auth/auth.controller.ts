@@ -1,35 +1,37 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { CurrentUser } from './current-user.decorator.js';
+import type { AuthenticatedUser } from './authenticated-user.interface.js';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
-    @Post('register')
-    register(@Body() dto: RegisterDto) {
-        return this.authService.register(dto);
-    }
+  @Post('register')
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
 
-    @Post('login')
-    @HttpCode(HttpStatus.OK)
-    login (@Body() dto: LoginDto) {
-        return this.authService.login(dto);
-    }
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
 
-    @Get('me')
-    @UseGuards(JwtAuthGuard)
-    getProfile(@Req() req: {
-    user: {
-        userId: string;
-        email: string;
-        role: string;
-    };
-    }) {
-    return req.user;
-    }
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser() user: AuthenticatedUser) {
+    return user;
+  }
 }
-
-//36ac6bb52b3a4fa8ba8042663bcb7bd4

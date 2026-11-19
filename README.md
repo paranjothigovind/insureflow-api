@@ -1,126 +1,141 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# InsureFlow API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend for an insurance-management platform. Agents register and sign in, and the data model covers their customers, the policies sold to them, the products those policies are based on, and the payments made against each policy.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Built with **NestJS 12**, **Prisma 6** and **PostgreSQL 17**, written in TypeScript (ESM).
 
-## Description
+## Status
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+This is an early-stage project. What exists today:
 
-## Project setup
+- Agent registration and login with JWT access tokens
+- A protected `GET /auth/me` endpoint
+- A database health check
+- The full relational schema and initial migration for users, agents, customers, policies, products and payments
+- CI pipeline (Jenkins) and a production Docker image
 
-```bash
-$ npm install
-```
+CRUD endpoints for customers, policies and payments are not built yet. The schema for them is already in place.
 
-## Compile and run the project
+## API
+
+| Method | Path             | Auth   | Description                                                   |
+| ------ | ---------------- | ------ | ------------------------------------------------------------- |
+| GET    | `/`              | –      | Liveness check, returns `Hello World!`                        |
+| GET    | `/health/db`     | –      | `200` when PostgreSQL answers, `503` otherwise                |
+| POST   | `/auth/register` | –      | Create an agent account                                       |
+| POST   | `/auth/login`    | –      | Exchange credentials for a bearer token (15 min lifetime)     |
+| GET    | `/auth/me`       | Bearer | Returns the authenticated user's `userId`, `email` and `role` |
+
+Example:
 
 ```bash
-# development
-$ npm run start
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"jane@example.com","password":"a-long-password","fullName":"Jane Agent"}'
 
-# watch mode
-$ npm run start:dev
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"jane@example.com","password":"a-long-password"}'
+# => {"accessToken":"...","tokenType":"Bearer","expiresIn":900}
 
-# production mode
-$ npm run start:prod
+curl http://localhost:3000/auth/me -H "Authorization: Bearer <accessToken>"
 ```
 
-## Run tests
+### Design notes
+
+- **Validation:** a global `ValidationPipe` strips unknown fields and rejects requests that contain them (`whitelist` + `forbidNonWhitelisted`).
+- **Passwords:** hashed with bcrypt (cost 12). Inputs are capped at 72 characters because bcrypt ignores anything beyond 72 bytes.
+- **Login errors:** unknown email, deactivated account and wrong password all return the same `401` message, so the endpoint can't be used to discover which emails are registered.
+- **Duplicate emails:** checked up front, and the unique index is also handled (Prisma `P2002` becomes a `409`) so two simultaneous sign-ups can't both succeed.
+- **Token validation:** `JwtStrategy` re-reads the user on every request, so deactivating an account takes effect immediately instead of when the token expires.
+- **Money:** amounts are stored as `Decimal` columns rather than floats.
+
+## Data model
+
+```
+User 1──0..1 Agent 1──* Customer 1──* Policy *──1 PolicyProduct
+                                        │
+                                        1
+                                        │
+                                        * Payment
+```
+
+Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Deletes are `Restrict` throughout, so a customer or policy with history can't be removed by accident. Policies are indexed by customer, product and `(status, endDate)` for expiry queries.
+
+## Getting started
+
+**Prerequisites:** Node.js 24, npm, and Docker (for the local database).
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
+cp .env.example .env        # then edit: set POSTGRES_PASSWORD, DATABASE_URL and JWT_SECRET
+npm run db:up               # start PostgreSQL in Docker
+npm run prisma:migrate      # apply migrations and generate the Prisma client
+npm run start:dev           # http://localhost:3000
 ```
 
-## Deployment
+Check it is up: `curl http://localhost:3000/health/db`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Environment variables
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Variable                                | Required   | Purpose                                                            |
+| --------------------------------------- | ---------- | ------------------------------------------------------------------ |
+| `DATABASE_URL`                          | yes        | PostgreSQL connection string used by Prisma                        |
+| `JWT_SECRET`                            | yes        | Signing key for access tokens. The app refuses to start without it |
+| `POSTGRES_PASSWORD`                     | for Docker | Password `docker-compose.yml` gives the local database             |
+| `PORT`                                  | no         | HTTP port, defaults to `3000`                                      |
+| `OBSERVE_APP_KEY`, `OBSERVE_APP_SECRET` | no         | Enables [NestJS Observe](#observability)                           |
+
+## Scripts
+
+| Command                                | What it does                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `npm run start:dev`                    | Run with file watching                                                                            |
+| `npm run build` / `npm run start:prod` | Compile to `dist/` and run the compiled app                                                       |
+| `npm run lint`                         | Type-aware lint with oxlint                                                                       |
+| `npm run format`                       | Format `src/` and `test/` with Prettier                                                           |
+| `npm test`                             | Unit tests (Vitest)                                                                               |
+| `npm run test:cov`                     | Unit tests with coverage                                                                          |
+| `npm run test:e2e`                     | End-to-end tests. These boot the real app, so they need the database running and `JWT_SECRET` set |
+| `npm run prisma:migrate`               | Create/apply migrations in development                                                            |
+| `npm run prisma:deploy`                | Apply existing migrations (CI / production)                                                       |
+
+Unit tests mock Prisma, so they run with no database.
+
+## Docker
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker build -t insureflow-api .
+docker run --rm -p 3000:3000 --env-file .env insureflow-api
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Inside the container `localhost` is the container itself, so point `DATABASE_URL` at a host the container can reach (for example `host.docker.internal` on Docker Desktop).
+
+The image is multi-stage (build, then a production stage with only runtime dependencies) and runs as the unprivileged `node` user. Apply migrations separately with `npm run prisma:deploy` before starting a new version, because the Prisma CLI is not included in the production image.
+
+## CI
+
+[`Jenkinsfile`](Jenkinsfile) runs on every build: install (`npm ci`), generate the Prisma client, lint, test, build.
 
 ## Observability
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+The app is instrumented with [NestJS Observe](https://observe.nestjs.com) (traces, logs, metrics and error tracking) through `ObserveModule` in [`src/app.module.ts`](src/app.module.ts). It is optional: without a key pair the app runs normally. To connect it, run `npx @nestjs/observe link`, or set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment.
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+## Project structure
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-This project is already instrumented. To connect it, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
-
-```bash
-$ npx @nestjs/observe link
 ```
-
-It writes the app key and secret into `.env` and makes every `nest start` script (`start`, `start:dev`, `start:debug`) load it. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand: create an application and an API key at [observe.nestjs.com](https://observe.nestjs.com), and set the pair as `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment the app runs in.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+src/
+  main.ts              bootstrap, global validation, shutdown hooks
+  app.module.ts        root module
+  app.controller.ts    liveness and database health endpoints
+  auth/                registration, login, JWT strategy and guard, DTOs
+  prisma/              PrismaService (connects/disconnects with the app lifecycle)
+prisma/
+  schema.prisma        data model
+  migrations/          SQL migrations
+test/                  end-to-end tests
+```
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Unlicensed, private project.
